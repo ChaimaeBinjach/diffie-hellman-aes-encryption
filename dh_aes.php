@@ -1,79 +1,58 @@
 <?php
-// Secure implementation of Diffie-Hellman Key Exchange and AES Encryption/Decryption in PHP
-
 // Constants for Diffie-Hellman algorithm
-const DH_PRIME = 23; // Prime number for the modulus (use a larger prime in production)
-const DH_GENERATOR = 5; // Generator (primitive root modulo DH_PRIME)
+const DH_PRIME = '26959946667150639794667015087019630673637144422540572481103610249215' .
+                 '86240415972168525968778613979297721632880679741677375922626020202991' .
+                 '00899122135964234148830096949773292668040609468928139167643337792914' .
+                 '32893441050911660774194075867720991474836581319810300767321046996567' .
+                 '45894096775906117876994783423200847665569424640676370666546365917169' .
+                 '86636126815380807940256022072559125059334804366032422325864875631266' .
+                 '04228254701566090700716245984701338977994718494815488227615651981412' .
+                 '00034194003322961484801923976024994946501752483598389004593236842278';
+const DH_GENERATOR = 5;
 
-/**
- * Represents a party in the Diffie-Hellman key exchange.
- */
+// Party class for Diffie-Hellman Key Exchange
 class Party
 {
-    private $privateKey; // Private key (kept secret)
-    private $publicKey; // Public key (shared with the other party)
-    private $sharedSecret; // Shared secret derived from the exchange
+    private $privateKey;
+    private $publicKey;
+    private $sharedSecret;
 
     public function __construct()
     {
-        // Generate a random private key securely
-        $this->privateKey = random_int(1, DH_PRIME - 1);
+        $this->privateKey = random_int(1, (int)bcsqrt(DH_PRIME, 0));
+
     }
 
-    /**
-     * Calculate and return the public key to share with the other party.
-     */
     public function generatePublicKey()
     {
-        // Compute public key as (g^privateKey) % p
         $this->publicKey = bcpowmod(DH_GENERATOR, $this->privateKey, DH_PRIME);
         return $this->publicKey;
     }
 
-    /**
-     * Compute the shared secret using the other party's public key.
-     * @param string $otherPublicKey The public key received from the other party.
-     */
     public function computeSharedSecret($otherPublicKey)
     {
-        // Shared secret = (otherPublicKey^privateKey) % p
         $this->sharedSecret = bcpowmod($otherPublicKey, $this->privateKey, DH_PRIME);
     }
 
-    /**
-     * Derive a 256-bit AES key from the shared secret.
-     * @return string AES key derived from the shared secret.
-     */
     public function getSharedSecretKey()
     {
-        // Convert the shared secret into a fixed-length 256-bit key using SHA-256
         return hash('sha256', $this->sharedSecret, true);
     }
 }
 
-/**
- * AES Encryption/Decryption Utility
- */
+// AES class for encryption and decryption
 class AES
 {
-    /**
-     * Encrypt a file using AES-256-CBC.
-     */
     public static function encrypt($key, $filePath, $outputPath)
     {
-        $iv = random_bytes(16); // Securely generate a random initialization vector (IV)
+        $iv = random_bytes(16);
         $inputHandle = fopen($filePath, 'rb');
         $outputHandle = fopen($outputPath, 'wb');
-        fwrite($outputHandle, $iv); // Store IV at the start of the encrypted file
+        fwrite($outputHandle, $iv);
 
         while (!feof($inputHandle)) {
-            $data = fread($inputHandle, 8192); // Read file in chunks
+            $data = fread($inputHandle, 8192);
             $ciphertext = openssl_encrypt($data, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv);
-            if ($ciphertext === false) {
-                fclose($inputHandle);
-                fclose($outputHandle);
-                throw new Exception("Encryption failed.");
-            }
             fwrite($outputHandle, $ciphertext);
         }
 
@@ -81,23 +60,15 @@ class AES
         fclose($outputHandle);
     }
 
-    /**
-     * Decrypt a file encrypted with AES-256-CBC.
-     */
     public static function decrypt($key, $filePath, $outputPath)
     {
         $inputHandle = fopen($filePath, 'rb');
-        $iv = fread($inputHandle, 16); // Read the IV from the encrypted file
+        $iv = fread($inputHandle, 16);
         $outputHandle = fopen($outputPath, 'wb');
 
         while (!feof($inputHandle)) {
-            $data = fread($inputHandle, 8192); // Read file in chunks
+            $data = fread($inputHandle, 8192);
             $plaintext = openssl_decrypt($data, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv);
-            if ($plaintext === false) {
-                fclose($inputHandle);
-                fclose($outputHandle);
-                throw new Exception("Decryption failed.");
-            }
             fwrite($outputHandle, $plaintext);
         }
 
@@ -106,139 +77,206 @@ class AES
     }
 }
 
-/**
- * Secure Server for handling Diffie-Hellman key exchange and file operations.
- */
-class SecureServer
-{
-    private $party;
+// Handle form submission or self-request (client-server)
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = $_POST['action'];
+    $inputFile = $_FILES['inputFile']['tmp_name'];
+    $outputFile = $_POST['outputFile'];
 
-    public function __construct()
-    {
-        $this->party = new Party();
-    }
+    try {
+        $party = new Party();
+        $party->generatePublicKey(); // Normally exchanged with another party
+        $sharedKey = $party->getSharedSecretKey();
 
-    /**
-     * Run the server on the specified port.
-     */
-    public function run($port = 8000)
-    {
-        $serverSocket = stream_socket_server("tcp://127.0.0.1:$port", $errno, $errstr);
-        if (!$serverSocket) {
-            die("Error starting server: $errstr ($errno)\n");
+        if ($action === 'encrypt') {
+            AES::encrypt($sharedKey, $inputFile, $outputFile);
+            echo "<span class='success'>File successfully encrypted to: $outputFile</span>";
+        } elseif ($action === 'decrypt') {
+            AES::decrypt($sharedKey, $inputFile, $outputFile);
+            echo "<span class='success'>File successfully decrypted to: $outputFile</span>";
+        } else {
+            throw new Exception("Invalid action selected.");
         }
+    } catch (Exception $e) {
+        echo "<span class='error'>Error: " . $e->getMessage() . "</span>";
+    }
+}
 
-        echo "Server running on port $port. Waiting for connections...\n";
+// Handle client-server cURL interaction
+if (isset($_GET['action']) && $_GET['action'] === 'client') {
+    // This part simulates client action (it can call the same file as a "server")
+    $url = 'http://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];  // Full URL for the current script
+    $response = sendRequest($url, $_POST['action'], $_FILES['inputFile']['tmp_name'], $_POST['outputFile']);
+    echo $response;
+}
 
-        while ($client = stream_socket_accept($serverSocket)) {
-            echo "Client connected.\n";
+function sendRequest($url, $action, $file, $outputFile)
+{
+    $cfile = new CURLFile($file, 'application/octet-stream', basename($file));
+    $data = [
+        'action' => $action,
+        'inputFile' => $cfile,
+        'outputFile' => $outputFile
+    ];
 
-            try {
-                // Step 1: Perform key exchange
-                $publicKey = $this->party->generatePublicKey();
-                fwrite($client, "$publicKey\n");
-                $clientKey = trim(fgets($client));
-                if (!is_numeric($clientKey)) {
-                    throw new Exception("Invalid public key received from client.");
-                }
-                $this->party->computeSharedSecret($clientKey);
-                $sharedKey = $this->party->getSharedSecretKey();
-                fwrite($client, "Key exchange complete. Ready for commands.\n");
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+    
+    $response = curl_exec($ch);
+    curl_close($ch);
 
-                // Step 2: Handle encryption/decryption commands
-                while (($command = trim(fgets($client))) !== 'exit') {
-                    if (preg_match('/^(encrypt|decrypt) (\S+) (\S+)$/', $command, $matches)) {
-                        $action = $matches[1];
-                        $inputPath = $matches[2];
-                        $outputPath = $matches[3];
+    return $response;
+}
 
-                        if (!file_exists($inputPath)) {
-                            fwrite($client, "Error: File $inputPath not found.\n");
-                            continue;
-                        }
+?>
 
-                        if ($action === 'encrypt') {
-                            AES::encrypt($sharedKey, $inputPath, $outputPath);
-                            fwrite($client, "File encrypted to $outputPath.\n");
-                        } elseif ($action === 'decrypt') {
-                            AES::decrypt($sharedKey, $inputPath, $outputPath);
-                            fwrite($client, "File decrypted to $outputPath.\n");
-                        }
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure File Encryption/Decryption</title>
+    <style>
+       body {
+    font-family: Arial, sans-serif;
+    background-color: #f4f4f9;
+    color: #333;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
+
+.container {
+    background: #fff;
+    padding: 20px 30px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    width: 100%;
+    max-width: 450px; /* Slightly larger width for more comfortable spacing */
+}
+
+h1 {
+    font-size: 1.8rem;
+    color: #007BFF;
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+form {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+label {
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+input, select, button {
+    font-size: 1rem;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    width: 100%;
+    box-sizing: border-box; /* Ensures padding doesn't affect width */
+}
+
+button {
+    background-color: #007BFF;
+    color: white;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+button:hover {
+    background-color: #0056b3;
+}
+
+p {
+    font-size: 0.9rem;
+    color: #555;
+    text-align: center;
+    margin-top: 20px;
+}
+
+p strong {
+    color: #007BFF;
+}
+
+.message {
+    margin-top: 20px;
+    font-size: 1rem;
+    text-align: center;
+}
+
+.error {
+    color: #FF4C4C;
+}
+
+.success {
+    color: #28A745;
+}
+
+    </style>
+</head>
+
+
+
+
+<body>
+    <div class="container">
+        <h1>Secure File Encryption/Decryption</h1>
+        <form action="" method="POST" enctype="multipart/form-data">
+            <label for="action">Select Action:</label>
+            <select name="action" id="action" required>
+                <option value="encrypt">Encrypt</option>
+                <option value="decrypt">Decrypt</option>
+            </select>
+
+            <label for="inputFile">Select File:</label>
+            <input type="file" name="inputFile" id="inputFile" required>
+
+            <label for="outputFile">Output File Name:</label>
+            <input type="text" name="outputFile" id="outputFile" placeholder="e.g., output.txt" required>
+
+            <button type="submit">Submit</button>
+        </form>
+        <p><strong>Note:</strong> Use larger primes (e.g., 2048-bit) for real-world Diffie-Hellman applications to ensure strong security.</p>
+        <div class="message">
+            <?php
+            // Display success or error messages
+            if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+                $action = $_POST['action'];
+                $inputFile = $_FILES['inputFile']['tmp_name'];
+                $outputFile = $_POST['outputFile'];
+
+                try {
+                    $party = new Party();
+                    $party->generatePublicKey(); // Normally exchanged with another party
+                    $sharedKey = $party->getSharedSecretKey();
+
+                    if ($action === 'encrypt') {
+                        AES::encrypt($sharedKey, $inputFile, $outputFile);
+                        echo "<span class='success'>File successfully encrypted to: $outputFile</span>";
+                    } elseif ($action === 'decrypt') {
+                        AES::decrypt($sharedKey, $inputFile, $outputFile);
+                        echo "<span class='success'>File successfully decrypted to: $outputFile</span>";
                     } else {
-                        fwrite($client, "Invalid command. Use: encrypt/decrypt [input file] [output file].\n");
+                        throw new Exception("Invalid action selected.");
                     }
+                } catch (Exception $e) {
+                    echo "<span class='error'>Error: " . $e->getMessage() . "</span>";
                 }
-            } catch (Exception $e) {
-                fwrite($client, "Error: " . $e->getMessage() . "\n");
             }
-
-            fclose($client);
-        }
-
-        fclose($serverSocket);
-    }
-}
-
-/**
- * Secure Client for connecting to the server and executing commands.
- */
-class SecureClient
-{
-    private $party;
-
-    public function __construct()
-    {
-        $this->party = new Party();
-    }
-
-    /**
-     * Connect to the server and interact.
-     */
-    public function connect($host = '127.0.0.1', $port = 8000)
-    {
-        $clientSocket = stream_socket_client("tcp://$host:$port", $errno, $errstr);
-        if (!$clientSocket) {
-            die("Error connecting to server: $errstr ($errno)\n");
-        }
-
-        try {
-            // Step 1: Perform key exchange
-            $serverKey = trim(fgets($clientSocket));
-            if (!is_numeric($serverKey)) {
-                throw new Exception("Invalid public key received from server.");
-            }
-            $publicKey = $this->party->generatePublicKey();
-            fwrite($clientSocket, "$publicKey\n");
-            $this->party->computeSharedSecret($serverKey);
-            $sharedKey = $this->party->getSharedSecretKey();
-            echo "Connected to server. Enter commands:\n";
-
-            // Step 2: Send commands
-            $handle = fopen("php://stdin", "r");
-            while ($command = trim(fgets($handle))) {
-                if ($command === 'exit') {
-                    fwrite($clientSocket, "exit\n");
-                    break;
-                }
-                fwrite($clientSocket, "$command\n");
-                echo fgets($clientSocket);
-            }
-        } catch (Exception $e) {
-            echo "Error: " . $e->getMessage() . "\n";
-        }
-
-        fclose($clientSocket);
-    }
-}
-
-// Main program
-if ($argc > 1 && $argv[1] === 'server') {
-    $server = new SecureServer();
-    $server->run();
-} elseif ($argc > 1 && $argv[1] === 'client') {
-    $client = new SecureClient();
-    $client->connect();
-} else {
-    echo "Usage: php script.php [server|client]\n";
-}
-?> 
+            ?>
+        </div>
+    </div>
+</body>
+</html>
