@@ -20,7 +20,6 @@ class Party
     public function __construct()
     {
         $this->privateKey = random_int(1, (int)bcsqrt(DH_PRIME, 0));
-
     }
 
     public function generatePublicKey()
@@ -43,7 +42,22 @@ class Party
 // AES class for encryption and decryption
 class AES
 {
-    public static function encrypt($key, $filePath, $outputPath)
+    public static function encryptMessage($key, $message)
+    {
+        $iv = random_bytes(16);
+        $ciphertext = openssl_encrypt($message, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv);
+        return base64_encode($iv . $ciphertext);
+    }
+
+    public static function decryptMessage($key, $encryptedMessage)
+    {
+        $data = base64_decode($encryptedMessage);
+        $iv = substr($data, 0, 16);
+        $ciphertext = substr($data, 16);
+        return openssl_decrypt($ciphertext, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv);
+    }
+
+    public static function encryptFile($key, $filePath, $outputPath)
     {
         $iv = random_bytes(16);
         $inputHandle = fopen($filePath, 'rb');
@@ -60,7 +74,7 @@ class AES
         fclose($outputHandle);
     }
 
-    public static function decrypt($key, $filePath, $outputPath)
+    public static function decryptFile($key, $filePath, $outputPath)
     {
         $inputHandle = fopen($filePath, 'rb');
         $iv = fread($inputHandle, 16);
@@ -77,60 +91,60 @@ class AES
     }
 }
 
-// Handle form submission or self-request (client-server)
+// Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action = $_POST['action'];
-    $inputFile = $_FILES['inputFile']['tmp_name'];
-    $outputFile = $_POST['outputFile'];
+    $action = $_POST['action'] ?? '';
+    $inputMessage = $_POST['inputMessage'] ?? '';
+    $inputFile = $_FILES['inputFile']['tmp_name'] ?? '';
+    $outputFile = $_POST['outputFile'] ?? '';
 
     try {
         $party = new Party();
         $party->generatePublicKey(); // Normally exchanged with another party
         $sharedKey = $party->getSharedSecretKey();
 
-        if ($action === 'encrypt') {
-            AES::encrypt($sharedKey, $inputFile, $outputFile);
-            echo "<span class='success'>File successfully encrypted to: $outputFile</span>";
-        } elseif ($action === 'decrypt') {
-            AES::decrypt($sharedKey, $inputFile, $outputFile);
-            echo "<span class='success'>File successfully decrypted to: $outputFile</span>";
-        } else {
-            throw new Exception("Invalid action selected.");
+        switch ($action) {
+            case 'encryptMessage':
+                if (empty($inputMessage)) {
+                    throw new Exception("Message is required for encryption.");
+                }
+                $encryptedMessage = AES::encryptMessage($sharedKey, $inputMessage);
+                echo "<span class='success'>Encrypted Message: $encryptedMessage</span>";
+                break;
+
+            case 'decryptMessage':
+                if (empty($inputMessage)) {
+                    throw new Exception("Message is required for decryption.");
+                }
+                $decryptedMessage = AES::decryptMessage($sharedKey, $inputMessage);
+                echo "<span class='success'>Decrypted Message: $decryptedMessage</span>";
+                break;
+
+            case 'encryptFile':
+                if (empty($inputFile) || empty($outputFile)) {
+                    throw new Exception("Input file and output file name are required for file encryption.");
+                }
+                AES::encryptFile($sharedKey, $inputFile, $outputFile);
+                echo "<span class='success'>File successfully encrypted to: $outputFile</span>";
+                break;
+
+            case 'decryptFile':
+                if (empty($inputFile) || empty($outputFile)) {
+                    throw new Exception("Input file and output file name are required for file decryption.");
+                }
+                AES::decryptFile($sharedKey, $inputFile, $outputFile);
+                echo "<span class='success'>File successfully decrypted to: $outputFile</span>";
+                break;
+
+            default:
+                throw new Exception("Invalid action selected.");
         }
     } catch (Exception $e) {
         echo "<span class='error'>Error: " . $e->getMessage() . "</span>";
     }
 }
-
-// Handle client-server cURL interaction
-if (isset($_GET['action']) && $_GET['action'] === 'client') {
-    // This part simulates client action (it can call the same file as a "server")
-    $url = 'http://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];  // Full URL for the current script
-    $response = sendRequest($url, $_POST['action'], $_FILES['inputFile']['tmp_name'], $_POST['outputFile']);
-    echo $response;
-}
-
-function sendRequest($url, $action, $file, $outputFile)
-{
-    $cfile = new CURLFile($file, 'application/octet-stream', basename($file));
-    $data = [
-        'action' => $action,
-        'inputFile' => $cfile,
-        'outputFile' => $outputFile
-    ];
-
-    $ch = curl_init($url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
-    
-    $response = curl_exec($ch);
-    curl_close($ch);
-
-    return $response;
-}
-
 ?>
+
 
 <!DOCTYPE html>
 <html lang="en">
@@ -229,54 +243,30 @@ p strong {
 
 
 
-
 <body>
     <div class="container">
         <h1>Secure File Encryption/Decryption</h1>
         <form action="" method="POST" enctype="multipart/form-data">
             <label for="action">Select Action:</label>
             <select name="action" id="action" required>
-                <option value="encrypt">Encrypt</option>
-                <option value="decrypt">Decrypt</option>
+                <option value="encryptMessage">Encrypt Message</option>
+                <option value="decryptMessage">Decrypt Message</option>
+                <option value="encryptFile">Encrypt File</option>
+                <option value="decryptFile">Decrypt File</option>
             </select>
 
-            <label for="inputFile">Select File:</label>
-            <input type="file" name="inputFile" id="inputFile" required>
+            <label for="inputMessage">Message (for message encryption/decryption):</label>
+            <textarea name="inputMessage" id="inputMessage" placeholder="Enter message here..."></textarea>
 
-            <label for="outputFile">Output File Name:</label>
-            <input type="text" name="outputFile" id="outputFile" placeholder="e.g., output.txt" required>
+            <label for="inputFile">File (for file encryption/decryption):</label>
+            <input type="file" name="inputFile" id="inputFile">
+
+            <label for="outputFile">Output File Name (for file encryption/decryption):</label>
+            <input type="text" name="outputFile" id="outputFile" placeholder="e.g., output.txt">
 
             <button type="submit">Submit</button>
         </form>
         <p><strong>Note:</strong> Use larger primes (e.g., 2048-bit) for real-world Diffie-Hellman applications to ensure strong security.</p>
-        <div class="message">
-            <?php
-            // Display success or error messages
-            if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-                $action = $_POST['action'];
-                $inputFile = $_FILES['inputFile']['tmp_name'];
-                $outputFile = $_POST['outputFile'];
-
-                try {
-                    $party = new Party();
-                    $party->generatePublicKey(); // Normally exchanged with another party
-                    $sharedKey = $party->getSharedSecretKey();
-
-                    if ($action === 'encrypt') {
-                        AES::encrypt($sharedKey, $inputFile, $outputFile);
-                        echo "<span class='success'>File successfully encrypted to: $outputFile</span>";
-                    } elseif ($action === 'decrypt') {
-                        AES::decrypt($sharedKey, $inputFile, $outputFile);
-                        echo "<span class='success'>File successfully decrypted to: $outputFile</span>";
-                    } else {
-                        throw new Exception("Invalid action selected.");
-                    }
-                } catch (Exception $e) {
-                    echo "<span class='error'>Error: " . $e->getMessage() . "</span>";
-                }
-            }
-            ?>
-        </div>
     </div>
 </body>
 </html>
