@@ -10,7 +10,9 @@ const DH_PRIME = '26959946667150639794667015087019630673637144422540572481103610
                  '00034194003322961484801923976024994946501752483598389004593236842278';
 const DH_GENERATOR = 5;
 
-// Party class for Diffie-Hellman Key Exchange
+/**
+ * Class representing a party in the Diffie-Hellman key exchange
+ */
 class Party
 {
     private $privateKey;
@@ -19,44 +21,78 @@ class Party
 
     public function __construct()
     {
+        // Generate a private key (random integer)
         $this->privateKey = random_int(1, (int)bcsqrt(DH_PRIME, 0));
     }
 
+    /**
+     * Generate the public key based on private key and return it
+     */
     public function generatePublicKey()
     {
         $this->publicKey = bcpowmod(DH_GENERATOR, $this->privateKey, DH_PRIME);
         return $this->publicKey;
     }
 
+    /**
+     * Compute the shared secret using the received public key of another party
+     */
     public function computeSharedSecret($otherPublicKey)
     {
         $this->sharedSecret = bcpowmod($otherPublicKey, $this->privateKey, DH_PRIME);
     }
 
+    /**
+     * Return the shared secret derived key (SHA-256 hash)
+     */
     public function getSharedSecretKey()
     {
         return hash('sha256', $this->sharedSecret, true);
     }
+
+    /**
+     * Simulate networked public key exchange (placeholder)
+     */
+    public static function exchangeKeys($partyA, $partyB)
+    {
+        $partyAPublic = $partyA->generatePublicKey();
+        $partyBPublic = $partyB->generatePublicKey();
+
+        // Simulating sending/receiving public keys
+        $partyA->computeSharedSecret($partyBPublic);
+        $partyB->computeSharedSecret($partyAPublic);
+    }
 }
 
-// AES class for encryption and decryption
+/**
+ * AES class for encryption and decryption
+ */
 class AES
 {
+    /**
+     * Encrypt a plaintext message using AES-256-CBC
+     */
     public static function encryptMessage($key, $message)
     {
-        $iv = random_bytes(16);
+        $iv = random_bytes(16); // Generate a random Initialization Vector (IV)
         $ciphertext = openssl_encrypt($message, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv);
-        return base64_encode($iv . $ciphertext);
+        return base64_encode($iv . $ciphertext); // Return IV + ciphertext (Base64 encoded)
     }
 
+    /**
+     * Decrypt an encrypted message
+     */
     public static function decryptMessage($key, $encryptedMessage)
     {
         $data = base64_decode($encryptedMessage);
-        $iv = substr($data, 0, 16);
-        $ciphertext = substr($data, 16);
+        $iv = substr($data, 0, 16); // Extract IV
+        $ciphertext = substr($data, 16); // Extract ciphertext
         return openssl_decrypt($ciphertext, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv);
     }
 
+    /**
+     * Encrypt large binary files in chunks
+     */
     public static function encryptFile($key, $filePath, $outputPath)
     {
         $iv = random_bytes(16);
@@ -74,6 +110,9 @@ class AES
         fclose($outputHandle);
     }
 
+    /**
+     * Decrypt large binary files in chunks
+     */
     public static function decryptFile($key, $filePath, $outputPath)
     {
         $inputHandle = fopen($filePath, 'rb');
@@ -90,6 +129,22 @@ class AES
         fclose($outputHandle);
     }
 }
+
+// Usage example: Two-party key exchange
+$partyA = new Party();
+$partyB = new Party();
+Party::exchangeKeys($partyA, $partyB);
+
+$sharedKeyA = $partyA->getSharedSecretKey();
+$sharedKeyB = $partyB->getSharedSecretKey();
+
+// Verify keys match
+if ($sharedKeyA === $sharedKeyB) {
+    echo "Shared keys match!\n";
+} else {
+    echo "Error: Shared keys do not match.\n";
+}
+
 
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
