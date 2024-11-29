@@ -300,7 +300,7 @@ p strong {
 
 <body>
     <div class="container">
-        <h1>Secure File Encryption/Decryption</h1>
+        <h1>Advanced File and Message Cryptography</h1>
         <form action="" method="POST" enctype="multipart/form-data">
             <label for="action">Select Action:</label>
             <select name="action" id="action" required>
