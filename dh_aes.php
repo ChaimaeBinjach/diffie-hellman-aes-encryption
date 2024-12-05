@@ -1,4 +1,45 @@
 <?php
+// Title: Secure File Encryption/Decryption using Diffie-Hellman Key Exchange and AES
+
+// This program is designed to securely encrypt and decrypt both messages and files using advanced cryptographic techniques. 
+// The program works in two parts: the Diffie-Hellman Key Exchange and the AES Encryption.
+// First, the Diffie-Hellman method is used to establish a shared secret key between two parties without actually transmitting the key itself over the network. 
+//This key is then used with AES (Advanced Encryption Standard), a widely used encryption method, to secure messages or files.
+
+// Here’s how it works step-by-step:
+
+// 1. Generating the Secret Key:  
+//    Two parties (e.g., Party A and Party B) use the Diffie-Hellman Key Exchange method. 
+//They each generate a private key (a random number) and calculate a public key (based on their private key, a predefined prime number, and a generator). 
+//They exchange these public keys and use them to compute a shared secret a number known only to the two parties. This shared secret is turned into a fixed-length secret key using the SHA-256 hashing algorithm.
+
+// 2. Encrypting Messages or Files:  
+//    Once the shared key is generated, the user can use it to encrypt messages or files using AES in CBC (Cipher Block Chaining) mode. 
+// AES is a strong encryption method that ensures the data cannot be understood without the secret key. The encryption process also uses a unique initialization vector (IV) for each operation, making the encryption even more secure.
+
+// 3. Decrypting Messages or Files:  
+//    When a user wants to decrypt a message or file, they use the same shared secret key generated earlier. 
+//The IV (which is part of the encrypted data) is used to reverse the encryption and retrieve the original message or file.
+
+
+// How the user will use it:  
+// - When the user opens the web interface, they can choose one of the following actions:  
+//   1. Encrypt a Message: Enter a message, and the program will encrypt it using the shared secret key. The encrypted output is displayed for you to save or share securely.  
+//   2. Decrypt a Message: Enter an encrypted message, and the program will decrypt it back into plain text, provided the correct shared secret key is used.  
+//   3. Encrypt a File: Upload a file and specify an output filename. The program encrypts the file using the shared secret key and saves the encrypted version.  
+//   4. Decrypt a File: Upload an encrypted file, provide an output filename, and the program decrypts it back to its original content.  
+
+// The user doesn’t need to understand the complex math or algorithms behind it—all they do is interact with a simple form. The program automatically manages key generation, encryption, and decryption behind the scenes.
+
+// Methods Used
+// 1. Diffie-Hellman Key Exchange: A secure method to create a shared secret key over an insecure channel. This ensures the key isn’t exposed during transmission.  
+// 2. AES (Advanced Encryption Standard): A strong and efficient encryption technique used to protect data. The program uses AES-256-CBC, which is a 256-bit key version of AES with CBC mode for enhanced security.  
+
+// In short, this program ensures that sensitive information stays secure, whether it’s a text message or a file, by leveraging state-of-the-art cryptographic methods. It’s easy for users and extremely difficult for attackers to compromise.
+
+?>
+
+<?php
 // Constants for Diffie-Hellman algorithm
 const DH_PRIME = '26959946667150639794667015087019630673637144422540572481103610249215' .
                  '86240415972168525968778613979297721632880679741677375922626020202991' .
